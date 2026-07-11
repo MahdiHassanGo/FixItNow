@@ -1,8 +1,7 @@
 import bcrypt from "bcryptjs";
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../generated/prisma/client";
-import { Role } from "../generated/prisma/enums";
+import { PrismaClient, Prisma } from "@prisma/client";
 
 const connectionString = `${process.env.DATABASE_URL}`;
 const adapter = new PrismaPg({ connectionString });
@@ -15,12 +14,12 @@ const main = async () => {
 
   await prisma.user.upsert({
     where: { email: adminEmail },
-    update: { role: Role.ADMIN, activeStatus: "ACTIVE" },
+    update: { role: Prisma.Role.ADMIN, activeStatus: "ACTIVE" },
     create: {
       name: "FixItNow Admin",
       email: adminEmail,
       password: hashedAdminPassword,
-      role: Role.ADMIN,
+      role: Prisma.Role.ADMIN,
       phone: "01700000000",
       location: "Dhaka"
     }
@@ -44,12 +43,12 @@ const main = async () => {
   const technicianPassword = await bcrypt.hash("technician123", 12);
   const technicianUser = await prisma.user.upsert({
     where: { email: "technician@fixitnow.com" },
-    update: { role: Role.TECHNICIAN, activeStatus: "ACTIVE" },
+    update: { role: Prisma.Role.TECHNICIAN, activeStatus: "ACTIVE" },
     create: {
       name: "Demo Technician",
       email: "technician@fixitnow.com",
       password: technicianPassword,
-      role: Role.TECHNICIAN,
+      role: Prisma.Role.TECHNICIAN,
       phone: "01800000000",
       location: "Dhaka"
     }
@@ -102,12 +101,12 @@ const main = async () => {
   const customerPassword = await bcrypt.hash("customer123", 12);
   await prisma.user.upsert({
     where: { email: "customer@fixitnow.com" },
-    update: { role: Role.CUSTOMER, activeStatus: "ACTIVE" },
+    update: { role: Prisma.Role.CUSTOMER, activeStatus: "ACTIVE" },
     create: {
       name: "Demo Customer",
       email: "customer@fixitnow.com",
       password: customerPassword,
-      role: Role.CUSTOMER,
+      role: Prisma.Role.CUSTOMER,
       phone: "01900000000",
       location: "Dhaka"
     }

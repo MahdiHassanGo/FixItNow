@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { ZodTypeAny } from "zod";
+import { ZodIssue, ZodTypeAny } from "zod";
 import { AppError } from "../errors/AppError";
 
 export const validateRequest = (schema: ZodTypeAny) => {
@@ -12,7 +12,7 @@ export const validateRequest = (schema: ZodTypeAny) => {
     });
 
     if (!result.success) {
-      const errorDetails = result.error.issues.map((issue) => ({
+      const errorDetails = result.error.issues.map((issue: ZodIssue) => ({
         path: issue.path.join("."),
         message: issue.message
       }));

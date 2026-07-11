@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { JwtPayload } from "jsonwebtoken";
-import { Role } from "../../generated/prisma/enums";
+import { Prisma } from "@prisma/client";
 import config from "../config";
 import { AppError } from "../errors/AppError";
 import { prisma } from "../lib/prisma";
@@ -14,13 +14,13 @@ declare global {
         id: string;
         name: string;
         email: string;
-        role: Role;
+        role: Prisma.Role;
       };
     }
   }
 }
 
-export const auth = (...requiredRoles: Role[]) => {
+export const auth = (...requiredRoles: Prisma.Role[]) => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const bearerToken = req.headers.authorization?.startsWith("Bearer ")
       ? req.headers.authorization.split(" ")[1]
