@@ -95,7 +95,7 @@ After seeding:
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | `admin@fixitnow.local` | Value of `ADMIN_PASSWORD` in `.env` |
+| Admin | `admin@fixitnow.com` | Value of `ADMIN_PASSWORD` in `.env` |
 | Technician | `technician@fixitnow.local` | `Technician123!` |
 | Customer | `customer@fixitnow.local` | `Customer123!` |
 
