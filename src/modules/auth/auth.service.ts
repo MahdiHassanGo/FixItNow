@@ -1,11 +1,12 @@
+import { Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { Role } from "../../../generated/prisma/enums";
-import config from "../../config";
-import { AppError } from "../../errors/AppError";
+import { config } from "../../config";
+import { ApiError } from "../../core/ApiError";
 import { prisma } from "../../lib/prisma";
-import { jwtUtils } from "../../utils/jwt";
+import { createTokenPair, verifyRefreshToken } from "../../utils/jwt";
+import { publicUserSelect } from "../../utils/userSelect";
 
-type RegisterPayload = {
+type RegistrationInput = {
   name: string;
   email: string;
   password: string;
@@ -14,114 +15,87 @@ type RegisterPayload = {
   role: "CUSTOMER" | "TECHNICIAN";
 };
 
-type LoginPayload = {
-  email: string;
-  password: string;
-};
+type LoginInput = { email: string; password: string };
 
-const userSelect = {
-  id: true,
-  name: true,
-  email: true,
-  phone: true,
-  location: true,
-  role: true,
-  activeStatus: true,
-  createdAt: true,
-  updatedAt: true,
-  technicianProfile: true
-};
+const tokenPayload = (user: { id: string; email: string; role: Role }) => ({
+  sub: user.id,
+  email: user.email,
+  role: user.role
+});
 
-const createAuthTokens = (payload: { id: string; name: string; email: string; role: Role }) => {
-  const accessToken = jwtUtils.createToken(payload, config.jwtAccessSecret, config.jwtAccessExpiresIn);
-  const refreshToken = jwtUtils.createToken(payload, config.jwtRefreshSecret, config.jwtRefreshExpiresIn);
-  return { accessToken, refreshToken };
-};
+const register = async (input: RegistrationInput) => {
+  const duplicate = await prisma.user.findUnique({ where: { email: input.email } });
+  if (duplicate) throw new ApiError(409, "An account already exists with this email");
 
-const register = async (payload: RegisterPayload) => {
-  const existingUser = await prisma.user.findUnique({ where: { email: payload.email } });
-  if (existingUser) {
-    throw new AppError(409, "Email already exists");
-  }
+  const password = await bcrypt.hash(input.password, config.bcryptSaltRounds);
+  const role = input.role === "TECHNICIAN" ? Role.TECHNICIAN : Role.CUSTOMER;
 
-  const hashedPassword = await bcrypt.hash(payload.password, config.bcryptSaltRounds);
-
-  const user = await prisma.user.create({
+  return prisma.user.create({
     data: {
-      name: payload.name,
-      email: payload.email,
-      password: hashedPassword,
-      phone: payload.phone,
-      location: payload.location,
-      role: payload.role as Role,
-      technicianProfile:
-        payload.role === "TECHNICIAN"
-          ? {
+      name: input.name,
+      email: input.email,
+      password,
+      phone: input.phone,
+      location: input.location,
+      role,
+      ...(role === Role.TECHNICIAN
+        ? {
+            technicianProfile: {
               create: {
                 skills: [],
-                pricePerHour: 0,
-                location: payload.location
+                location: input.location,
+                pricePerHour: 0
               }
             }
-          : undefined
+          }
+        : {})
     },
-    select: userSelect
+    select: {
+      ...publicUserSelect,
+      technicianProfile: true
+    }
+  });
+};
+
+const login = async (input: LoginInput) => {
+  const user = await prisma.user.findUnique({ where: { email: input.email } });
+  if (!user || !(await bcrypt.compare(input.password, user.password))) {
+    throw new ApiError(401, "Email or password is incorrect");
+  }
+  if (user.activeStatus === "BLOCKED") throw new ApiError(403, "This account has been blocked");
+
+  const tokens = createTokenPair(tokenPayload(user));
+  const safeUser = await prisma.user.findUniqueOrThrow({
+    where: { id: user.id },
+    select: { ...publicUserSelect, technicianProfile: true }
   });
 
-  return user;
+  return { user: safeUser, ...tokens };
 };
 
-const login = async (payload: LoginPayload) => {
-  const user = await prisma.user.findUnique({ where: { email: payload.email } });
-  if (!user) {
-    throw new AppError(401, "Invalid email or password");
+const refresh = async (refreshToken: string | undefined) => {
+  if (!refreshToken) throw new ApiError(401, "Refresh token is required");
+
+  let claims;
+  try {
+    claims = verifyRefreshToken(refreshToken);
+  } catch {
+    throw new ApiError(401, "Refresh token is invalid or expired");
+  }
+  if (claims.type !== "refresh") throw new ApiError(401, "Invalid token type");
+
+  const user = await prisma.user.findUnique({ where: { id: claims.sub } });
+  if (!user || user.email !== claims.email || user.activeStatus === "BLOCKED") {
+    throw new ApiError(401, "Refresh token is no longer valid");
   }
 
-  if (user.activeStatus === "BLOCKED") {
-    throw new AppError(403, "Your account is blocked");
-  }
-
-  const isPasswordMatched = await bcrypt.compare(payload.password, user.password);
-  if (!isPasswordMatched) {
-    throw new AppError(401, "Invalid email or password");
-  }
-
-  const tokenPayload = { id: user.id, name: user.name, email: user.email, role: user.role };
-  const tokens = createAuthTokens(tokenPayload);
-
-  const loggedInUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: userSelect });
-
-  return { ...tokens, user: loggedInUser };
+  return createTokenPair(tokenPayload(user));
 };
 
-const refreshToken = async (token: string) => {
-  if (!token) {
-    throw new AppError(401, "Refresh token is required");
-  }
+const getCurrentUser = (userId: string) =>
+  prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { ...publicUserSelect, technicianProfile: true }
+  });
 
-  const decoded = jwtUtils.verifyToken(token, config.jwtRefreshSecret);
-  const user = await prisma.user.findUnique({ where: { id: decoded.id as string } });
-
-  if (!user || user.activeStatus === "BLOCKED") {
-    throw new AppError(401, "Invalid refresh token");
-  }
-
-  const accessToken = jwtUtils.createToken(
-    { id: user.id, name: user.name, email: user.email, role: user.role },
-    config.jwtAccessSecret,
-    config.jwtAccessExpiresIn
-  );
-
-  return { accessToken };
-};
-
-const getMe = async (userId: string) => {
-  return prisma.user.findUniqueOrThrow({ where: { id: userId }, select: userSelect });
-};
-
-export const authService = {
-  register,
-  login,
-  refreshToken,
-  getMe
-};
+export const authService = { register, login, refresh, getCurrentUser };

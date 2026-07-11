@@ -1,52 +1,26 @@
-import { NextFunction, Request, Response } from "express";
-import httpStatus from "http-status";
-import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import type { Request, Response } from "express";
+import { asyncRoute } from "../../core/asyncRoute";
+import { respond } from "../../core/respond";
 import { adminService } from "./admin.service";
 
-const getUsers = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await adminService.getUsers();
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Users retrieved successfully",
-    data: result
+const users = asyncRoute(async (req: Request, res: Response) => {
+  const result = await adminService.listUsers(req.query as never);
+  respond(res, { message: "Users retrieved", data: result.data, meta: result.meta });
+});
+
+const updateUserStatus = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, {
+    message: "User status updated",
+    data: await adminService.updateUserStatus(req.user!.id, String(req.params.id), req.body.activeStatus)
   });
 });
 
-const updateUserStatus = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await adminService.updateUserStatus(String(req.params.id), req.body.activeStatus);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "User status updated successfully",
-    data: result
-  });
+const bookings = asyncRoute(async (_req: Request, res: Response) => {
+  respond(res, { message: "All bookings retrieved", data: await adminService.listBookings() });
 });
 
-const getAllBookings = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await adminService.getAllBookings();
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "All bookings retrieved successfully",
-    data: result
-  });
+const payments = asyncRoute(async (_req: Request, res: Response) => {
+  respond(res, { message: "All payments retrieved", data: await adminService.listPayments() });
 });
 
-const getAllPayments = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await adminService.getAllPayments();
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "All payments retrieved successfully",
-    data: result
-  });
-});
-
-export const adminController = {
-  getUsers,
-  updateUserStatus,
-  getAllBookings,
-  getAllPayments
-};
+export const adminController = { users, updateUserStatus, bookings, payments };

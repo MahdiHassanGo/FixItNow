@@ -1,4 +1,14 @@
 import Stripe from "stripe";
-import config from "../config";
+import { config } from "../config";
+import { ApiError } from "../core/ApiError";
 
-export const stripe = new Stripe(config.stripeSecretKey);
+let stripeClient: Stripe | undefined;
+
+export const getStripe = (): Stripe => {
+  if (!config.stripe.secretKey) {
+    throw new ApiError(503, "Stripe is not configured on this server");
+  }
+
+  stripeClient ??= new Stripe(config.stripe.secretKey);
+  return stripeClient;
+};

@@ -1,76 +1,34 @@
-import { NextFunction, Request, Response } from "express";
-import httpStatus from "http-status";
-import { BookingStatus } from "../../../generated/prisma/enums";
-import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import type { Request, Response } from "express";
+import { asyncRoute } from "../../core/asyncRoute";
+import { respond } from "../../core/respond";
 import { technicianService } from "./technician.service";
 
-const getAll = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await technicianService.getAll(req.query as never);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Technicians retrieved successfully",
-    data: result.data,
-    meta: result.meta
+const list = asyncRoute(async (req: Request, res: Response) => {
+  const result = await technicianService.list(req.query as never);
+  respond(res, { message: "Technicians retrieved", data: result.data, meta: result.meta });
+});
+
+const getById = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, { message: "Technician profile retrieved", data: await technicianService.getById(String(req.params.id)) });
+});
+
+const updateProfile = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, { message: "Technician profile updated", data: await technicianService.updateProfile(req.user!.id, req.body) });
+});
+
+const updateAvailability = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, { message: "Availability updated", data: await technicianService.replaceAvailability(req.user!.id, req.body.slots) });
+});
+
+const bookings = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, { message: "Technician bookings retrieved", data: await technicianService.listBookings(req.user!.id) });
+});
+
+const updateBookingStatus = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, {
+    message: "Booking status updated",
+    data: await technicianService.changeBookingStatus(req.user!.id, String(req.params.id), req.body.status)
   });
 });
 
-const getById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await technicianService.getById(String(req.params.id));
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Technician retrieved successfully",
-    data: result
-  });
-});
-
-const updateProfile = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await technicianService.updateProfile(req.user!.id, req.body);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Technician profile updated successfully",
-    data: result
-  });
-});
-
-const updateAvailability = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await technicianService.updateAvailability(req.user!.id, req.body.slots);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Availability updated successfully",
-    data: result
-  });
-});
-
-const getMyBookings = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await technicianService.getMyBookings(req.user!.id);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Technician bookings retrieved successfully",
-    data: result
-  });
-});
-
-const updateBookingStatus = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await technicianService.updateBookingStatus(req.user!.id, String(req.params.bookingId), req.body.status as BookingStatus);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Booking status updated successfully",
-    data: result
-  });
-});
-
-export const technicianController = {
-  getAll,
-  getById,
-  updateProfile,
-  updateAvailability,
-  getMyBookings,
-  updateBookingStatus
-};
+export const technicianController = { list, getById, updateProfile, updateAvailability, bookings, updateBookingStatus };

@@ -1,14 +1,24 @@
-import jwt, { JwtPayload, SignOptions } from "jsonwebtoken";
+import type { Role } from "@prisma/client";
+import jwt, { type SignOptions } from "jsonwebtoken";
+import { config } from "../config";
 
-const createToken = (payload: object, secret: string, expiresIn: string) => {
-  return jwt.sign(payload, secret, { expiresIn } as SignOptions);
+export type TokenClaims = {
+  sub: string;
+  email: string;
+  role: Role;
+  type: "access" | "refresh";
 };
 
-const verifyToken = (token: string, secret: string) => {
-  return jwt.verify(token, secret) as JwtPayload;
-};
+const sign = (claims: TokenClaims, secret: string, expiresIn: string) =>
+  jwt.sign(claims, secret, { expiresIn } as SignOptions);
 
-export const jwtUtils = {
-  createToken,
-  verifyToken
-};
+export const createTokenPair = (input: Omit<TokenClaims, "type">) => ({
+  accessToken: sign({ ...input, type: "access" }, config.jwt.accessSecret, config.jwt.accessExpiresIn),
+  refreshToken: sign({ ...input, type: "refresh" }, config.jwt.refreshSecret, config.jwt.refreshExpiresIn)
+});
+
+export const verifyAccessToken = (token: string) =>
+  jwt.verify(token, config.jwt.accessSecret) as TokenClaims;
+
+export const verifyRefreshToken = (token: string) =>
+  jwt.verify(token, config.jwt.refreshSecret) as TokenClaims;

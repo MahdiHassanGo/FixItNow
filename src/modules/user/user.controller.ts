@@ -1,19 +1,11 @@
-import { NextFunction, Request, Response } from "express";
-import httpStatus from "http-status";
-import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import type { Request, Response } from "express";
+import { asyncRoute } from "../../core/asyncRoute";
+import { respond } from "../../core/respond";
 import { userService } from "./user.service";
 
-const updateMe = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await userService.updateMe(req.user!.id, req.body);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Profile updated successfully",
-    data: result
-  });
+const updateMe = asyncRoute(async (req: Request, res: Response) => {
+  const user = await userService.updateMyProfile(req.user!.id, req.body);
+  respond(res, { message: "Profile updated successfully", data: user });
 });
 
-export const userController = {
-  updateMe
-};
+export const userController = { updateMe };

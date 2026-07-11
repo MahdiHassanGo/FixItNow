@@ -1,30 +1,24 @@
-import { AppError } from "../../errors/AppError";
 import { prisma } from "../../lib/prisma";
+import { publicUserSelect } from "../../utils/userSelect";
 
-const updateMe = async (userId: string, payload: { name?: string; phone?: string; location?: string }) => {
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: payload,
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      location: true,
-      role: true,
-      activeStatus: true,
-      createdAt: true,
-      updatedAt: true
+type UpdateProfileInput = { name?: string; phone?: string | null; location?: string | null };
+
+const updateMyProfile = async (userId: string, input: UpdateProfileInput) => {
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id: userId },
+      data: input,
+      select: publicUserSelect
+    });
+
+    if (user.role === "TECHNICIAN" && input.location !== undefined) {
+      await tx.technicianProfile.updateMany({
+        where: { userId },
+        data: { location: input.location }
+      });
     }
+    return user;
   });
-
-  if (!user) {
-    throw new AppError(404, "User not found");
-  }
-
-  return user;
 };
 
-export const userService = {
-  updateMe
-};
+export const userService = { updateMyProfile };

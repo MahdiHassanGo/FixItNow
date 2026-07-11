@@ -1,55 +1,45 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import express, { Application, Request, Response } from "express";
-import config from "./config";
-import { globalErrorHandler } from "./middlewares/globalErrorHandler";
+import express, { type Request, type Response } from "express";
+import { config } from "./config";
+import { errorHandler } from "./middlewares/errorHandler";
 import { notFound } from "./middlewares/notFound";
-import { adminRoutes } from "./modules/admin/admin.route";
-import { authRoutes } from "./modules/auth/auth.route";
-import { bookingRoutes } from "./modules/booking/booking.route";
-import { categoryRoutes } from "./modules/category/category.route";
-// import { paymentController } from "./modules/payment/payment.controller";
-// import { paymentRoutes } from "./modules/payment/payment.route";
-import { reviewRoutes } from "./modules/review/review.route";
-import { serviceRoutes } from "./modules/service/service.route";
-import { technicianRoutes } from "./modules/technician/technician.route";
-import { userRoutes } from "./modules/user/user.route";
+import { paymentController } from "./modules/payment/payment.controller";
+import { apiRouter } from "./routes";
 
-const app: Application = express();
+export const app = express();
 
+app.disable("x-powered-by");
 app.use(
   cors({
-    origin: [config.frontendUrl, config.appUrl],
-    credentials: true
+    credentials: true,
+    origin(origin, callback) {
+      if (!origin || config.frontendOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error("Origin is not allowed by CORS"));
+    }
   })
 );
 
-app.post("/api/payments/webhook", express.raw({ type: "application/json" }), paymentController.handleWebhook);
+// Stripe signatures require the untouched request body, so this route must be registered before express.json().
+app.post("/api/payments/stripe/webhook", express.raw({ type: "application/json" }), paymentController.stripeWebhook);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
 
-app.get("/", (req: Request, res: Response) => {
-  res.json({ success: true, message: "FixItNow API is running" });
+app.get("/", (_req: Request, res: Response) => {
+  res.json({ success: true, message: "FixItNow API is running", documentation: "/api/health" });
 });
 
-app.get("/api/health", (req: Request, res: Response) => {
-  res.json({ success: true, message: "Server health is okay" });
+app.get("/api/health", (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    statusCode: 200,
+    message: "FixItNow API is healthy",
+    data: { environment: config.nodeEnv, timestamp: new Date().toISOString() }
+  });
 });
 
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/categories", categoryRoutes);
-app.use("/api/services", serviceRoutes);
-app.use("/api/technicians", technicianRoutes);
-app.use("/api/technician", technicianRoutes);
-app.use("/api/bookings", bookingRoutes);
-app.use("/api/payments", paymentRoutes);
-app.use("/api/reviews", reviewRoutes);
-app.use("/api/admin", adminRoutes);
-
+app.use("/api", apiRouter);
 app.use(notFound);
-app.use(globalErrorHandler);
-
-export default app;
+app.use(errorHandler);

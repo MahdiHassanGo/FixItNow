@@ -1,99 +1,106 @@
-import { Role, BookingStatus } from "../../../generated/prisma/enums";
-import { AppError } from "../../errors/AppError";
+import { BookingStatus, Prisma, Role } from "@prisma/client";
+import { ApiError } from "../../core/ApiError";
 import { prisma } from "../../lib/prisma";
+import { canCustomerCancel } from "../../utils/bookingState";
+import { localScheduleParts, timeToMinutes } from "../../utils/time";
 
-const bookingInclude = {
-  service: { include: { category: true } },
-  technician: { include: { user: { select: { id: true, name: true, email: true, phone: true } } } },
-  customer: { select: { id: true, name: true, email: true, phone: true } },
-  payment: true,
-  review: true
+type CreateBookingInput = {
+  serviceId: string;
+  scheduledAt: Date;
+  address: string;
+  note?: string;
 };
 
-const create = async (
-  customerId: string,
-  payload: { serviceId: string; scheduledAt: Date; address: string; note?: string }
-) => {
-  const service = await prisma.service.findUnique({
-    where: { id: payload.serviceId },
-    include: { technician: true }
+const bookingInclude = {
+  customer: { select: { id: true, name: true, email: true, phone: true, location: true } },
+  technician: {
+    include: { user: { select: { id: true, name: true, email: true, phone: true, location: true } } }
+  },
+  service: { include: { category: true } },
+  payment: true,
+  review: true
+} satisfies Prisma.BookingInclude;
+
+const create = async (customerId: string, input: CreateBookingInput) => {
+  if (input.scheduledAt.getTime() <= Date.now()) throw new ApiError(400, "Booking time must be in the future");
+
+  const service = await prisma.service.findFirst({
+    where: { id: input.serviceId, isActive: true },
+    include: {
+      technician: {
+        include: {
+          user: { select: { id: true, activeStatus: true } },
+          availability: { where: { isAvailable: true } }
+        }
+      }
+    }
   });
 
-  if (!service || !service.isActive) {
-    throw new AppError(404, "Service not found");
-  }
+  if (!service || service.technician.user.activeStatus !== "ACTIVE") throw new ApiError(404, "Service is not available");
+  if (service.technician.userId === customerId) throw new ApiError(400, "You cannot book your own service");
 
-  if (service.technician.userId === customerId) {
-    throw new AppError(400, "You cannot book your own service");
-  }
+  const timeZone = (service.technician as typeof service.technician & { timezone?: string }).timezone ?? "Asia/Dhaka";
+  const local = localScheduleParts(input.scheduledAt, timeZone);
+  const available = service.technician.availability.some(
+    (slot) =>
+      slot.dayOfWeek === local.day &&
+      local.minutes >= timeToMinutes(slot.startTime) &&
+      local.minutes < timeToMinutes(slot.endTime)
+  );
+  if (!available) throw new ApiError(409, "The technician is not available at the requested time");
+
+  const conflictingBooking = await prisma.booking.findFirst({
+    where: {
+      technicianId: service.technicianId,
+      scheduledAt: input.scheduledAt,
+      status: { in: [BookingStatus.REQUESTED, BookingStatus.ACCEPTED, BookingStatus.PAID, BookingStatus.IN_PROGRESS] }
+    }
+  });
+  if (conflictingBooking) throw new ApiError(409, "That time slot has already been booked");
 
   return prisma.booking.create({
     data: {
       customerId,
       technicianId: service.technicianId,
       serviceId: service.id,
-      scheduledAt: payload.scheduledAt,
-      address: payload.address,
-      note: payload.note,
+      scheduledAt: input.scheduledAt,
+      address: input.address,
+      note: input.note,
       totalAmount: service.price
     },
     include: bookingInclude
   });
 };
 
-const getMyBookings = async (userId: string, role: Role) => {
-  if (role === Role.ADMIN) {
-    return prisma.booking.findMany({
-      include: bookingInclude,
-      orderBy: { createdAt: "desc" }
-    });
-  }
+const listForUser = async (userId: string, role: Role) => {
+  const where: Prisma.BookingWhereInput =
+    role === Role.ADMIN
+      ? {}
+      : role === Role.TECHNICIAN
+        ? { technician: { userId } }
+        : { customerId: userId };
 
-  return prisma.booking.findMany({
-    where: { customerId: userId },
-    include: bookingInclude,
-    orderBy: { createdAt: "desc" }
-  });
+  return prisma.booking.findMany({ where, include: bookingInclude, orderBy: { createdAt: "desc" } });
 };
 
 const getById = async (userId: string, role: Role, bookingId: string) => {
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId },
-    include: bookingInclude
-  });
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId }, include: bookingInclude });
+  if (!booking) throw new ApiError(404, "Booking not found");
 
-  if (!booking) {
-    throw new AppError(404, "Booking not found");
-  }
-
-  if (role === Role.ADMIN || booking.customerId === userId || booking.technician.userId === userId) {
-    return booking;
-  }
-
-  throw new AppError(403, "You do not have permission to view this booking");
+  const canView =
+    role === Role.ADMIN || booking.customerId === userId || booking.technician.userId === userId;
+  if (!canView) throw new ApiError(403, "You cannot view this booking");
+  return booking;
 };
 
 const cancel = async (userId: string, role: Role, bookingId: string) => {
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId }
-  });
-
-  if (!booking) {
-    throw new AppError(404, "Booking not found");
-  }
-
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+  if (!booking) throw new ApiError(404, "Booking not found");
   if (role !== Role.ADMIN && booking.customerId !== userId) {
-    throw new AppError(403, "You can cancel only your own booking");
+    throw new ApiError(403, "Customers may cancel only their own bookings");
   }
-
-  const nonCancellableStatuses: BookingStatus[] = [
-    BookingStatus.IN_PROGRESS,
-    BookingStatus.COMPLETED,
-    BookingStatus.CANCELLED
-  ];
-
-  if (nonCancellableStatuses.includes(booking.status)) {
-    throw new AppError(400, "This booking cannot be cancelled now");
+  if (!canCustomerCancel(booking.status)) {
+    throw new ApiError(400, `A ${booking.status} booking cannot be cancelled`);
   }
 
   return prisma.booking.update({
@@ -103,9 +110,4 @@ const cancel = async (userId: string, role: Role, bookingId: string) => {
   });
 };
 
-export const bookingService = {
-  create,
-  getMyBookings,
-  getById,
-  cancel
-};
+export const bookingService = { create, listForUser, getById, cancel };

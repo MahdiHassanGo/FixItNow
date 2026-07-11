@@ -1,48 +1,38 @@
-import { NextFunction, Request, Response } from "express";
-import { ZodIssue, ZodTypeAny } from "zod";
-import { AppError } from "../errors/AppError";
+import type { NextFunction, Request, Response } from "express";
+import type { ZodType } from "zod";
+import { ApiError } from "../core/ApiError";
 
-export const validateRequest = (schema: ZodTypeAny) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const result = schema.safeParse({
+export const validateRequest = (schema: ZodType) => {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    const parsed = schema.safeParse({
       body: req.body,
       query: req.query,
       params: req.params,
       cookies: req.cookies
     });
 
-    if (!result.success) {
-      const errorDetails = result.error.issues.map((issue: ZodIssue) => ({
-        path: issue.path.join("."),
-        message: issue.message
-      }));
-
-      throw new AppError(400, "Validation Error", errorDetails);
+    if (!parsed.success) {
+      throw new ApiError(
+        400,
+        "Request validation failed",
+        parsed.error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message
+        }))
+      );
     }
 
-    const parsedData = result.data as {
+    const data = parsed.data as {
       body?: unknown;
       query?: Request["query"];
       params?: Request["params"];
-      cookies?: unknown;
     };
 
-    if (parsedData.body !== undefined) {
-      req.body = parsedData.body;
+    if (data.body !== undefined) req.body = data.body;
+    if (data.params !== undefined) req.params = data.params;
+    if (data.query !== undefined) {
+      Object.defineProperty(req, "query", { value: data.query, configurable: true });
     }
-
-    if (parsedData.query !== undefined) {
-      Object.defineProperty(req, "query", {
-        value: parsedData.query,
-        writable: true,
-        configurable: true
-      });
-    }
-
-    if (parsedData.params !== undefined) {
-      req.params = parsedData.params;
-    }
-
     next();
   };
 };

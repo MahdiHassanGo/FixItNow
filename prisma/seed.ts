@@ -1,86 +1,81 @@
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient, Prisma } from "@prisma/client";
 
-const connectionString = `${process.env.DATABASE_URL}`;
-const adapter = new PrismaPg({ connectionString });
-const prisma = new PrismaClient({ adapter });
+if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required for seeding");
 
-const main = async () => {
-  const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
-  const adminEmail = process.env.ADMIN_EMAIL || "admin@fixitnow.com";
-  const hashedAdminPassword = await bcrypt.hash(adminPassword, 12);
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+
+const seed = async () => {
+  const adminPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD ?? "ChangeMe123!", 12);
+  const technicianPassword = await bcrypt.hash("Technician123!", 12);
+  const customerPassword = await bcrypt.hash("Customer123!", 12);
 
   await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: { role: Prisma.Role.ADMIN, activeStatus: "ACTIVE" },
+    where: { email: process.env.ADMIN_EMAIL ?? "admin@fixitnow.local" },
+    update: { activeStatus: "ACTIVE", role: Role.ADMIN },
     create: {
-      name: "FixItNow Admin",
-      email: adminEmail,
-      password: hashedAdminPassword,
-      role: Prisma.Role.ADMIN,
+      name: process.env.ADMIN_NAME ?? "FixItNow Administrator",
+      email: process.env.ADMIN_EMAIL ?? "admin@fixitnow.local",
+      password: adminPassword,
       phone: "01700000000",
-      location: "Dhaka"
+      location: "Dhaka",
+      role: Role.ADMIN
     }
   });
 
   const categories = [
-    { name: "Plumbing", description: "Pipe repair, leakage fix, sink and bathroom work" },
-    { name: "Electrical", description: "Fan, light, switch, wiring and appliance support" },
-    { name: "Cleaning", description: "Home, office and deep cleaning services" },
-    { name: "Painting", description: "Interior and exterior painting services" }
+    { name: "Plumbing", description: "Leak repair, pipe installation, fittings and bathroom maintenance." },
+    { name: "Electrical", description: "Wiring, switches, lighting, fans and electrical troubleshooting." },
+    { name: "Cleaning", description: "Residential, office and deep-cleaning services." },
+    { name: "Painting", description: "Interior and exterior painting and surface preparation." }
   ];
 
   for (const category of categories) {
-    await prisma.category.upsert({
-      where: { name: category.name },
-      update: category,
-      create: category
-    });
+    await prisma.category.upsert({ where: { name: category.name }, update: category, create: category });
   }
 
-  const technicianPassword = await bcrypt.hash("technician123", 12);
-  const technicianUser = await prisma.user.upsert({
-    where: { email: "technician@fixitnow.com" },
-    update: { role: Prisma.Role.TECHNICIAN, activeStatus: "ACTIVE" },
+  const technician = await prisma.user.upsert({
+    where: { email: "technician@fixitnow.local" },
+    update: { activeStatus: "ACTIVE", role: Role.TECHNICIAN },
     create: {
-      name: "Demo Technician",
-      email: "technician@fixitnow.com",
+      name: "Rahim Service Expert",
+      email: "technician@fixitnow.local",
       password: technicianPassword,
-      role: Prisma.Role.TECHNICIAN,
       phone: "01800000000",
+      location: "Dhaka",
+      role: Role.TECHNICIAN
+    }
+  });
+
+  const profile = await prisma.technicianProfile.upsert({
+    where: { userId: technician.id },
+    update: {
+      bio: "Home-maintenance technician focused on plumbing and emergency repairs.",
+      skills: ["Leak detection", "Pipe repair", "Bathroom fittings"],
+      experienceYears: 5,
+      pricePerHour: 1200,
+      location: "Dhaka",
+      ...({ timezone: "Asia/Dhaka" } as never)
+    },
+    create: {
+      userId: technician.id,
+      bio: "Home-maintenance technician focused on plumbing and emergency repairs.",
+      skills: ["Leak detection", "Pipe repair", "Bathroom fittings"],
+      experienceYears: 5,
+      pricePerHour: 1200,
       location: "Dhaka"
     }
   });
 
   const plumbing = await prisma.category.findUniqueOrThrow({ where: { name: "Plumbing" } });
-
-  const profile = await prisma.technicianProfile.upsert({
-    where: { userId: technicianUser.id },
-    update: {
-      bio: "Experienced home service technician",
-      skills: ["Pipe repair", "Leakage fixing", "Bathroom fitting"],
-      experienceYears: 3,
-      pricePerHour: 20,
-      location: "Dhaka"
-    },
-    create: {
-      userId: technicianUser.id,
-      bio: "Experienced home service technician",
-      skills: ["Pipe repair", "Leakage fixing", "Bathroom fitting"],
-      experienceYears: 3,
-      pricePerHour: 20,
-      location: "Dhaka"
-    }
-  });
-
   await prisma.service.upsert({
     where: { id: "11111111-1111-4111-8111-111111111111" },
     update: {
-      title: "Emergency Pipe Leakage Repair",
-      description: "Fast pipe leakage and bathroom plumbing support",
-      price: 25,
+      title: "Emergency Water Leak Repair",
+      description: "Inspection and repair for urgent household pipe or fixture leaks.",
+      price: 1500,
       location: "Dhaka",
       isActive: true,
       categoryId: plumbing.id,
@@ -88,37 +83,45 @@ const main = async () => {
     },
     create: {
       id: "11111111-1111-4111-8111-111111111111",
-      title: "Emergency Pipe Leakage Repair",
-      description: "Fast pipe leakage and bathroom plumbing support",
-      price: 25,
+      title: "Emergency Water Leak Repair",
+      description: "Inspection and repair for urgent household pipe or fixture leaks.",
+      price: 1500,
       location: "Dhaka",
-      isActive: true,
       categoryId: plumbing.id,
       technicianId: profile.id
     }
   });
 
-  const customerPassword = await bcrypt.hash("customer123", 12);
+  const availability = ["SATURDAY", "SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY"] as const;
+  await prisma.availability.deleteMany({ where: { technicianId: profile.id } });
+  await prisma.availability.createMany({
+    data: availability.map((dayOfWeek) => ({
+      technicianId: profile.id,
+      dayOfWeek,
+      startTime: "09:00",
+      endTime: "18:00"
+    }))
+  });
+
   await prisma.user.upsert({
-    where: { email: "customer@fixitnow.com" },
-    update: { role: Prisma.Role.CUSTOMER, activeStatus: "ACTIVE" },
+    where: { email: "customer@fixitnow.local" },
+    update: { activeStatus: "ACTIVE", role: Role.CUSTOMER },
     create: {
       name: "Demo Customer",
-      email: "customer@fixitnow.com",
+      email: "customer@fixitnow.local",
       password: customerPassword,
-      role: Prisma.Role.CUSTOMER,
       phone: "01900000000",
-      location: "Dhaka"
+      location: "Dhaka",
+      role: Role.CUSTOMER
     }
   });
+
+  console.log("Seed completed");
 };
 
-main()
-  .then(async () => {
-    await prisma.$disconnect();
-  })
-  .catch(async (error) => {
+seed()
+  .catch((error) => {
     console.error(error);
-    await prisma.$disconnect();
-    process.exit(1);
-  });
+    process.exitCode = 1;
+  })
+  .finally(async () => prisma.$disconnect());

@@ -1,75 +1,37 @@
-import { NextFunction, Request, Response } from "express";
-import httpStatus from "http-status";
-import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import type { Request, Response } from "express";
+import { asyncRoute } from "../../core/asyncRoute";
+import { respond } from "../../core/respond";
 import { serviceService } from "./service.service";
 
-const create = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await serviceService.create(req.user!.id, req.body);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.CREATED,
-    message: "Service created successfully",
-    data: result
+const list = asyncRoute(async (req: Request, res: Response) => {
+  const result = await serviceService.list(req.query as never);
+  respond(res, { message: "Services retrieved", data: result.data, meta: result.meta });
+});
+
+const getById = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, { message: "Service retrieved", data: await serviceService.getById(String(req.params.id)) });
+});
+
+const mine = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, { message: "Your services retrieved", data: await serviceService.listMine(req.user!.id) });
+});
+
+const create = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, { statusCode: 201, message: "Service created", data: await serviceService.create(req.user!.id, req.body) });
+});
+
+const update = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, {
+    message: "Service updated",
+    data: await serviceService.update(req.user!.id, req.user!.role, String(req.params.id), req.body)
   });
 });
 
-const getAll = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await serviceService.getAll(req.query as never);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Services retrieved successfully",
-    data: result.data,
-    meta: result.meta
+const archive = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, {
+    message: "Service removed",
+    data: await serviceService.archive(req.user!.id, req.user!.role, String(req.params.id))
   });
 });
 
-const getById = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await serviceService.getById(String(req.params.id));
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Service retrieved successfully",
-    data: result
-  });
-});
-
-const update = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await serviceService.update(req.user!.id, req.user!.role, String(req.params.id), req.body);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Service updated successfully",
-    data: result
-  });
-});
-
-const remove = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await serviceService.remove(req.user!.id, req.user!.role, String(req.params.id));
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Service removed successfully",
-    data: result
-  });
-});
-
-const getMyServices = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await serviceService.getMyServices(req.user!.id);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "My services retrieved successfully",
-    data: result
-  });
-});
-
-export const serviceController = {
-  create,
-  getAll,
-  getById,
-  update,
-  remove,
-  getMyServices
-};
+export const serviceController = { list, getById, mine, create, update, archive };

@@ -1,52 +1,22 @@
-import { NextFunction, Request, Response } from "express";
-import httpStatus from "http-status";
-import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import type { Request, Response } from "express";
+import { asyncRoute } from "../../core/asyncRoute";
+import { respond } from "../../core/respond";
 import { categoryService } from "./category.service";
 
-const create = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await categoryService.create(req.body);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.CREATED,
-    message: "Category created successfully",
-    data: result
-  });
+const list = asyncRoute(async (_req: Request, res: Response) => {
+  respond(res, { message: "Categories retrieved", data: await categoryService.list() });
 });
 
-const getAll = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await categoryService.getAll();
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Categories retrieved successfully",
-    data: result
-  });
+const create = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, { statusCode: 201, message: "Category created", data: await categoryService.create(req.body) });
 });
 
-const update = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await categoryService.update(String(req.params.id), req.body);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Category updated successfully",
-    data: result
-  });
+const update = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, { message: "Category updated", data: await categoryService.update(String(req.params.id), req.body) });
 });
 
-const remove = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await categoryService.remove(String(req.params.id));
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Category deleted successfully",
-    data: result
-  });
+const remove = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, { message: "Category deleted", data: await categoryService.remove(String(req.params.id)) });
 });
 
-export const categoryController = {
-  create,
-  getAll,
-  update,
-  remove
-};
+export const categoryController = { list, create, update, remove };

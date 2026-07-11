@@ -1,59 +1,58 @@
-import { BookingStatus } from "../../../generated/prisma/enums";
-import { AppError } from "../../errors/AppError";
+import { BookingStatus } from "@prisma/client";
+import { ApiError } from "../../core/ApiError";
 import { prisma } from "../../lib/prisma";
 
-const create = async (customerId: string, payload: { bookingId: string; rating: number; comment?: string }) => {
-  const booking = await prisma.booking.findUnique({ where: { id: payload.bookingId } });
-  if (!booking || booking.customerId !== customerId) {
-    throw new AppError(404, "Booking not found");
-  }
+type ReviewInput = { bookingId: string; rating: number; comment?: string };
 
-  if (booking.status !== BookingStatus.COMPLETED) {
-    throw new AppError(400, "Review is allowed only after job completion");
-  }
-
-  const existingReview = await prisma.review.findUnique({ where: { bookingId: booking.id } });
-  if (existingReview) {
-    throw new AppError(400, "Review already exists for this booking");
-  }
-
-  const review = await prisma.review.create({
-    data: {
-      bookingId: booking.id,
-      customerId,
-      technicianId: booking.technicianId,
-      rating: payload.rating,
-      comment: payload.comment
-    },
-    include: { customer: { select: { id: true, name: true } } }
+const create = async (customerId: string, input: ReviewInput) => {
+  const booking = await prisma.booking.findUnique({
+    where: { id: input.bookingId },
+    include: { review: true }
   });
 
-  const stats = await prisma.review.aggregate({
-    where: { technicianId: booking.technicianId },
-    _avg: { rating: true },
-    _count: { rating: true }
-  });
+  if (!booking || booking.customerId !== customerId) throw new ApiError(404, "Completed booking not found");
+  if (booking.status !== BookingStatus.COMPLETED) throw new ApiError(400, "Reviews are allowed only after job completion");
+  if (booking.review) throw new ApiError(409, "This booking has already been reviewed");
 
-  await prisma.technicianProfile.update({
-    where: { id: booking.technicianId },
-    data: {
-      rating: Number(stats._avg.rating || 0),
-      totalReviews: stats._count.rating
-    }
-  });
+  return prisma.$transaction(async (tx) => {
+    const review = await tx.review.create({
+      data: {
+        bookingId: booking.id,
+        customerId,
+        technicianId: booking.technicianId,
+        rating: input.rating,
+        comment: input.comment
+      },
+      include: { customer: { select: { id: true, name: true } } }
+    });
 
-  return review;
+    const summary = await tx.review.aggregate({
+      where: { technicianId: booking.technicianId },
+      _avg: { rating: true },
+      _count: { rating: true }
+    });
+
+    await tx.technicianProfile.update({
+      where: { id: booking.technicianId },
+      data: {
+        rating: summary._avg.rating ?? 0,
+        totalReviews: summary._count.rating
+      }
+    });
+
+    return review;
+  });
 };
 
-const getTechnicianReviews = async (technicianId: string) => {
+const listForTechnician = async (technicianId: string) => {
+  const profile = await prisma.technicianProfile.findFirst({ where: { OR: [{ id: technicianId }, { userId: technicianId }] } });
+  if (!profile) throw new ApiError(404, "Technician not found");
+
   return prisma.review.findMany({
-    where: { technicianId },
+    where: { technicianId: profile.id },
     include: { customer: { select: { id: true, name: true } } },
     orderBy: { createdAt: "desc" }
   });
 };
 
-export const reviewService = {
-  create,
-  getTechnicianReviews
-};
+export const reviewService = { create, listForTechnician };

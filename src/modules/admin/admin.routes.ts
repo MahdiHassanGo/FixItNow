@@ -1,0 +1,20 @@
+import { Role } from "@prisma/client";
+import { Router } from "express";
+import { authenticate } from "../../middlewares/authenticate";
+import { validateRequest } from "../../middlewares/validateRequest";
+import { categoryController } from "../category/category.controller";
+import { categoryIdSchema, createCategorySchema, updateCategorySchema } from "../category/category.schemas";
+import { adminController } from "./admin.controller";
+import { adminUserQuerySchema, userStatusSchema } from "./admin.schemas";
+
+export const adminRouter = Router();
+adminRouter.use(authenticate(Role.ADMIN));
+adminRouter.get("/users", validateRequest(adminUserQuerySchema), adminController.users);
+adminRouter.patch("/users/:id", validateRequest(userStatusSchema), adminController.updateUserStatus);
+adminRouter.patch("/users/:id/status", validateRequest(userStatusSchema), adminController.updateUserStatus);
+adminRouter.get("/bookings", adminController.bookings);
+adminRouter.get("/payments", adminController.payments);
+adminRouter.get("/categories", categoryController.list);
+adminRouter.post("/categories", validateRequest(createCategorySchema), categoryController.create);
+adminRouter.patch("/categories/:id", validateRequest(updateCategorySchema), categoryController.update);
+adminRouter.delete("/categories/:id", validateRequest(categoryIdSchema), categoryController.remove);

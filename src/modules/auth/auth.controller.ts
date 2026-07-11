@@ -1,67 +1,44 @@
-import { NextFunction, Request, Response } from "express";
-import httpStatus from "http-status";
-import config from "../../config";
-import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import type { Request, Response } from "express";
+import { config } from "../../config";
+import { asyncRoute } from "../../core/asyncRoute";
+import { respond } from "../../core/respond";
 import { authService } from "./auth.service";
 
-const cookieOptions = {
+const cookieBase = {
   httpOnly: true,
   secure: config.nodeEnv === "production",
   sameSite: config.nodeEnv === "production" ? "none" : "lax"
 } as const;
 
-const register = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await authService.register(req.body);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.CREATED,
-    message: "User registered successfully",
-    data: result
-  });
+const register = asyncRoute(async (req: Request, res: Response) => {
+  const user = await authService.register(req.body);
+  respond(res, { statusCode: 201, message: "Account created successfully", data: user });
 });
 
-const login = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+const login = asyncRoute(async (req: Request, res: Response) => {
   const result = await authService.login(req.body);
-
-  res.cookie("accessToken", result.accessToken, { ...cookieOptions, maxAge: 1000 * 60 * 60 * 24 });
-  res.cookie("refreshToken", result.refreshToken, { ...cookieOptions, maxAge: 1000 * 60 * 60 * 24 * 7 });
-
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "User logged in successfully",
-    data: result
-  });
+  res.cookie("accessToken", result.accessToken, { ...cookieBase, maxAge: 24 * 60 * 60 * 1000 });
+  res.cookie("refreshToken", result.refreshToken, { ...cookieBase, maxAge: 7 * 24 * 60 * 60 * 1000 });
+  respond(res, { message: "Login successful", data: result });
 });
 
-const refreshToken = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const token = req.cookies?.refreshToken || req.body?.refreshToken;
-  const result = await authService.refreshToken(token);
-
-  res.cookie("accessToken", result.accessToken, { ...cookieOptions, maxAge: 1000 * 60 * 60 * 24 });
-
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Access token refreshed successfully",
-    data: result
-  });
+const refresh = asyncRoute(async (req: Request, res: Response) => {
+  const suppliedToken = req.cookies?.refreshToken ?? req.body?.refreshToken;
+  const tokens = await authService.refresh(suppliedToken);
+  res.cookie("accessToken", tokens.accessToken, { ...cookieBase, maxAge: 24 * 60 * 60 * 1000 });
+  res.cookie("refreshToken", tokens.refreshToken, { ...cookieBase, maxAge: 7 * 24 * 60 * 60 * 1000 });
+  respond(res, { message: "Tokens refreshed successfully", data: tokens });
 });
 
-const getMe = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await authService.getMe(req.user!.id);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Current user retrieved successfully",
-    data: result
-  });
+const logout = asyncRoute(async (_req: Request, res: Response) => {
+  res.clearCookie("accessToken", cookieBase);
+  res.clearCookie("refreshToken", cookieBase);
+  respond(res, { message: "Logout successful", data: null });
 });
 
-export const authController = {
-  register,
-  login,
-  refreshToken,
-  getMe
-};
+const me = asyncRoute(async (req: Request, res: Response) => {
+  const user = await authService.getCurrentUser(req.user!.id);
+  respond(res, { message: "Current user retrieved", data: user });
+});
+
+export const authController = { register, login, refresh, logout, me };

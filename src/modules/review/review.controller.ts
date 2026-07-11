@@ -1,30 +1,17 @@
-import { NextFunction, Request, Response } from "express";
-import httpStatus from "http-status";
-import { catchAsync } from "../../utils/catchAsync";
-import { sendResponse } from "../../utils/sendResponse";
+import type { Request, Response } from "express";
+import { asyncRoute } from "../../core/asyncRoute";
+import { respond } from "../../core/respond";
 import { reviewService } from "./review.service";
 
-const create = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await reviewService.create(req.user!.id, req.body);
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.CREATED,
-    message: "Review created successfully",
-    data: result
+const create = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, { statusCode: 201, message: "Review submitted", data: await reviewService.create(req.user!.id, req.body) });
+});
+
+const listForTechnician = asyncRoute(async (req: Request, res: Response) => {
+  respond(res, {
+    message: "Technician reviews retrieved",
+    data: await reviewService.listForTechnician(String(req.params.technicianId))
   });
 });
 
-const getTechnicianReviews = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
-  const result = await reviewService.getTechnicianReviews(String(req.params.technicianId));
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: "Reviews retrieved successfully",
-    data: result
-  });
-});
-
-export const reviewController = {
-  create,
-  getTechnicianReviews
-};
+export const reviewController = { create, listForTechnician };
