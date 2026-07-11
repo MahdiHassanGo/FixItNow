@@ -20,7 +20,7 @@ app.use(
   })
 );
 
-// Stripe signatures require the untouched request body, so this route must be registered before express.json().
+
 app.post("/api/payments/stripe/webhook", express.raw({ type: "application/json" }), paymentController.stripeWebhook);
 
 app.use(express.json({ limit: "1mb" }));
@@ -43,3 +43,5 @@ app.get("/api/health", (_req: Request, res: Response) => {
 app.use("/api", apiRouter);
 app.use(notFound);
 app.use(errorHandler);
+
+export default app;
