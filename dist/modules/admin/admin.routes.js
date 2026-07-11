@@ -1,0 +1,23 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.adminRouter = void 0;
+const client_1 = require("@prisma/client");
+const express_1 = require("express");
+const authenticate_1 = require("../../middlewares/authenticate");
+const validateRequest_1 = require("../../middlewares/validateRequest");
+const category_controller_1 = require("../category/category.controller");
+const category_schemas_1 = require("../category/category.schemas");
+const admin_controller_1 = require("./admin.controller");
+const admin_schemas_1 = require("./admin.schemas");
+exports.adminRouter = (0, express_1.Router)();
+exports.adminRouter.use((0, authenticate_1.authenticate)(client_1.Role.ADMIN));
+exports.adminRouter.get("/users", (0, validateRequest_1.validateRequest)(admin_schemas_1.adminUserQuerySchema), admin_controller_1.adminController.users);
+exports.adminRouter.patch("/users/:id", (0, validateRequest_1.validateRequest)(admin_schemas_1.userStatusSchema), admin_controller_1.adminController.updateUserStatus);
+exports.adminRouter.patch("/users/:id/status", (0, validateRequest_1.validateRequest)(admin_schemas_1.userStatusSchema), admin_controller_1.adminController.updateUserStatus);
+exports.adminRouter.get("/bookings", admin_controller_1.adminController.bookings);
+exports.adminRouter.get("/payments", admin_controller_1.adminController.payments);
+exports.adminRouter.get("/categories", category_controller_1.categoryController.list);
+exports.adminRouter.post("/categories", (0, validateRequest_1.validateRequest)(category_schemas_1.createCategorySchema), category_controller_1.categoryController.create);
+exports.adminRouter.patch("/categories/:id", (0, validateRequest_1.validateRequest)(category_schemas_1.updateCategorySchema), category_controller_1.categoryController.update);
+exports.adminRouter.delete("/categories/:id", (0, validateRequest_1.validateRequest)(category_schemas_1.categoryIdSchema), category_controller_1.categoryController.remove);
+//# sourceMappingURL=admin.routes.js.map

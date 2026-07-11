@@ -1,0 +1,20 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.paymentRouter = void 0;
+const client_1 = require("@prisma/client");
+const express_1 = require("express");
+const authenticate_1 = require("../../middlewares/authenticate");
+const validateRequest_1 = require("../../middlewares/validateRequest");
+const payment_controller_1 = require("./payment.controller");
+const payment_schemas_1 = require("./payment.schemas");
+exports.paymentRouter = (0, express_1.Router)();
+exports.paymentRouter.post("/create", (0, authenticate_1.authenticate)(client_1.Role.CUSTOMER), (0, validateRequest_1.validateRequest)(payment_schemas_1.createPaymentSchema), payment_controller_1.paymentController.create);
+exports.paymentRouter.post("/create-checkout-session", (0, authenticate_1.authenticate)(client_1.Role.CUSTOMER), (0, validateRequest_1.validateRequest)(payment_schemas_1.createPaymentSchema), payment_controller_1.paymentController.create);
+exports.paymentRouter.post("/confirm", (0, authenticate_1.authenticate)(client_1.Role.CUSTOMER, client_1.Role.ADMIN), (0, validateRequest_1.validateRequest)(payment_schemas_1.confirmPaymentSchema), payment_controller_1.paymentController.confirm);
+exports.paymentRouter.post("/sslcommerz/success", payment_controller_1.paymentController.sslSuccess);
+exports.paymentRouter.post("/sslcommerz/ipn", payment_controller_1.paymentController.sslIpn);
+exports.paymentRouter.post("/sslcommerz/fail", payment_controller_1.paymentController.sslFail);
+exports.paymentRouter.post("/sslcommerz/cancel", payment_controller_1.paymentController.sslCancel);
+exports.paymentRouter.get("/", (0, authenticate_1.authenticate)(client_1.Role.CUSTOMER, client_1.Role.ADMIN), payment_controller_1.paymentController.list);
+exports.paymentRouter.get("/:id", (0, authenticate_1.authenticate)(client_1.Role.CUSTOMER, client_1.Role.ADMIN), (0, validateRequest_1.validateRequest)(payment_schemas_1.paymentIdSchema), payment_controller_1.paymentController.getById);
+//# sourceMappingURL=payment.routes.js.map
