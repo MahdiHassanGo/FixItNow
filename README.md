@@ -2,6 +2,8 @@
 
 **Your Trusted Home Service Platform**
 
+**Live URL:** [https://fix-it-now-6b1c.vercel.app/](https://fix-it-now-6b1c.vercel.app/)
+
 FixItNow is a REST API for a home-service marketplace where customers book technicians, technicians manage services and jobs, and administrators moderate the platform.
 
 ## Technology
